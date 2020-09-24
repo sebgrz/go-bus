@@ -17,7 +17,7 @@ func main() {
 	kind := gobus.RabbitMQServiceBusOptionsFanOutKind
 	bus := gobus.NewRabbitMQServiceBus(eventsMapper, &gobus.RabbitMQServiceBusOptions{
 		Kind:      &kind,
-		Exchanage: "test-ex",
+		Exchanage: "test-ex", // can be test-ex|test-ex2|... for multiple exchanges
 		Queue:     "test-queue",
 		Server:    "amqp://rabbit:5672",
 	})

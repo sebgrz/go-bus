@@ -2,6 +2,7 @@ package gobus
 
 import (
 	"log"
+	"strings"
 
 	goeh "github.com/hetacode/go-eh"
 	"github.com/streadway/amqp"
@@ -87,18 +88,22 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 	errChan := make(chan error)
 
 	go func(b *RabbitMQServiceBus) {
+		exchanges := strings.Split("|", b.options.Exchanage)
 		ch := b.channelConsumer
-		if err := ch.ExchangeDeclare(
-			b.options.Exchanage,
-			*b.options.Kind,
-			true,
-			false,
-			false,
-			false,
-			nil,
-		); err != nil {
-			errChan <- err
-			return
+
+		for _, ex := range exchanges {
+			if err := ch.ExchangeDeclare(
+				ex,
+				*b.options.Kind,
+				true,
+				false,
+				false,
+				false,
+				nil,
+			); err != nil {
+				errChan <- err
+				return
+			}
 		}
 		defer ch.Close()
 
@@ -115,15 +120,17 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 			return
 		}
 
-		if err := ch.QueueBind(
-			q.Name,
-			b.options.RoutingKey,
-			b.options.Exchanage,
-			false,
-			nil,
-		); err != nil {
-			errChan <- err
-			return
+		for _, ex := range exchanges {
+			if err := ch.QueueBind(
+				q.Name,
+				b.options.RoutingKey,
+				ex,
+				false,
+				nil,
+			); err != nil {
+				errChan <- err
+				return
+			}
 		}
 		msgs, err := ch.Consume(
 			q.Name,
