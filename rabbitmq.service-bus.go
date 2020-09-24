@@ -88,7 +88,7 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 	errChan := make(chan error)
 
 	go func(b *RabbitMQServiceBus) {
-		exchanges := strings.Split("|", b.options.Exchanage)
+		exchanges := strings.Split(b.options.Exchanage, "|")
 		ch := b.channelConsumer
 
 		for _, ex := range exchanges {
