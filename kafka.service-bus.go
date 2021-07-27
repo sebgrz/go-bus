@@ -2,7 +2,6 @@ package gobus
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 
 // KafkaServiceBus implementation of service bus
 type KafkaServiceBus struct {
+	logger       ServiceBusLogger
 	eventsMapper *goeh.EventsMapper
 	producer     *kafka.Producer
 	topic        string
@@ -33,7 +33,7 @@ type KafkaServiceBusOptions struct {
 
 // NewKafkaServiceBus instance
 // eventsMapper is using only in consumer mode
-func NewKafkaServiceBus(eventsMapper *goeh.EventsMapper, options *KafkaServiceBusOptions) ServiceBus {
+func NewKafkaServiceBus(eventsMapper *goeh.EventsMapper, options *KafkaServiceBusOptions, logger ServiceBusLogger) ServiceBus {
 	if options == nil {
 		panic(fmt.Errorf("options parameter cannot be empty"))
 	}
@@ -41,6 +41,7 @@ func NewKafkaServiceBus(eventsMapper *goeh.EventsMapper, options *KafkaServiceBu
 	bus := &KafkaServiceBus{
 		options:      options,
 		eventsMapper: eventsMapper,
+		logger:       logger,
 	}
 
 	pr, err := kafka.NewProducer(&kafka.ConfigMap{
@@ -59,7 +60,7 @@ func NewKafkaServiceBus(eventsMapper *goeh.EventsMapper, options *KafkaServiceBu
 		defer close(deliveryChan)
 
 		for e := range deliveryChan {
-			fmt.Printf("event %s has been delivered ", e.String())
+			logger.Infof("event %s has been delivered ", e.String())
 		}
 	}(bus)
 
@@ -104,12 +105,12 @@ func (s *KafkaServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 				rawValue := string(e.Value)
 				event, err := s.eventsMapper.Resolve(rawValue)
 				if err != nil {
-					log.Print("Cannot resolve event: ", rawValue)
+					s.logger.Errorf("cannot resolve event: ", rawValue)
 					continue
 				}
 				eventCh <- event
 			case kafka.Error:
-				log.Printf("Error: %v", e)
+				s.logger.Errorf("kafka error: %v", e)
 				errCh <- e
 			}
 		}
@@ -121,7 +122,7 @@ func (s *KafkaServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 // Publish event to kafka topic
 // Event ID should represent kafka message key - it means that can be same for multiple events which should were put on the same partition
 func (s *KafkaServiceBus) Publish(event goeh.Event) error {
-	return publish(event, s.options.Retry, func(ev goeh.Event) error {
+	return publish(s.logger, event, s.options.Retry, func(ev goeh.Event) error {
 		msg := kafka.Message{
 			Key:            []byte(ev.GetID()),
 			TopicPartition: kafka.TopicPartition{Topic: &s.topic, Partition: kafka.PartitionAny},

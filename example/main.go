@@ -8,6 +8,15 @@ import (
 	goeh "github.com/hetacode/go-eh"
 )
 
+type fakeLogger struct{}
+
+func (l *fakeLogger) Infof(message string, args ...interface{}) {
+	log.Printf(message, args...)
+}
+func (l *fakeLogger) Errorf(message string, args ...interface{}) {
+	log.Printf(message, args...)
+}
+
 func main() {
 	eventsMapper := new(goeh.EventsMapper)
 	eventsMapper.Register(new(TestEvent))
@@ -15,7 +24,7 @@ func main() {
 	done := make(<-chan os.Signal)
 
 	kind := gobus.RabbitMQServiceBusOptionsFanOutKind
-	bus := gobus.NewRabbitMQServiceBus(eventsMapper, &gobus.RabbitMQServiceBusOptions{
+	bus := gobus.NewRabbitMQServiceBus(eventsMapper, new(fakeLogger), &gobus.RabbitMQServiceBusOptions{
 		Kind:      &kind,
 		Exchanage: "test-ex", // can be test-ex|test-ex2|... for multiple exchanges
 		Queue:     "test-queue",
