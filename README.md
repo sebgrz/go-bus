@@ -8,6 +8,17 @@ Universal pub-sub library for rabbitmq and kafka in Go
 ## Consumer implementation
 
 ```golang
+
+// fakeLogger is only for tests - you should use own implementation with own logger
+type fakeLogger struct{}
+
+func (l *fakeLogger) Infof(message string, args ...interface{}) {
+	log.Printf(message, args...)
+}
+func (l *fakeLogger) Errorf(message string, args ...interface{}) {
+	log.Printf(message, args...)
+}
+
 func main() {
 	eventsMapper := new(goeh.EventsMapper)
 	eventsMapper.Register(new(TestEvent))
@@ -15,7 +26,7 @@ func main() {
 	done := make(<-chan os.Signal)
 
 	kind := gobus.RabbitMQServiceBusOptionsFanOutKind
-	bus := gobus.NewRabbitMQServiceBus(eventsMapper, &gobus.RabbitMQServiceBusOptions{
+	bus := gobus.NewRabbitMQServiceBus(eventsMapper,  new(fakeLogger), &gobus.RabbitMQServiceBusOptions{
 		Kind:      &kind,
 		Exchanage: "test-ex",
 		Queue:     "test-queue",
@@ -42,12 +53,22 @@ func main() {
 
 ## Producer implementation
 ```golang
+// fakeLogger is only for tests - you should use own implementation with own logger
+type fakeLogger struct{}
+
+func (l *fakeLogger) Infof(message string, args ...interface{}) {
+	log.Printf(message, args...)
+}
+func (l *fakeLogger) Errorf(message string, args ...interface{}) {
+	log.Printf(message, args...)
+}
+
 func main() {
 	eventsMapper := new(goeh.EventsMapper)
 	eventsMapper.Register(new(TestEvent))
 
 	kind := gobus.RabbitMQServiceBusOptionsFanOutKind
-	bus := gobus.NewRabbitMQServiceBus(eventsMapper, &gobus.RabbitMQServiceBusOptions{
+	bus := gobus.NewRabbitMQServiceBus(eventsMapper, new(fakeLogger), &gobus.RabbitMQServiceBusOptions{
 		Kind:      &kind,
 		Exchanage: "test-ex",
 		Server:    "amqp://rabbit:5672",
