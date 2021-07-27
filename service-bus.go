@@ -37,6 +37,6 @@ func publish(event goeh.Event, retryOptions *RetryOptions, sendFunc func(ev goeh
 
 		break
 	}
-	log.Printf("Event: %s has been sent", event.GetType())
+	log.Printf("Event: %s has been sent after %d attempts", event.GetType(), retryAttempt)
 	return nil
 }
