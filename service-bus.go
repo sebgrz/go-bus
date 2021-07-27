@@ -2,7 +2,6 @@ package gobus
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	goeh "github.com/hetacode/go-eh"
@@ -14,7 +13,12 @@ type ServiceBus interface {
 	Publish(message goeh.Event) error
 }
 
-func publish(event goeh.Event, retryOptions *RetryOptions, sendFunc func(ev goeh.Event) error) error {
+type ServiceBusLogger interface {
+	Infof(message string, args ...interface{})
+	Errorf(message string, args ...interface{})
+}
+
+func publish(log ServiceBusLogger, event goeh.Event, retryOptions *RetryOptions, sendFunc func(ev goeh.Event) error) error {
 	if err := event.SavePayload(event); err != nil {
 		return err
 	}
@@ -37,6 +41,6 @@ func publish(event goeh.Event, retryOptions *RetryOptions, sendFunc func(ev goeh
 
 		break
 	}
-	log.Printf("Event: %s has been sent after %d attempts", event.GetType(), retryAttempt)
+	log.Infof("Event: %s has been sent after %d attempts", event.GetType(), retryAttempt)
 	return nil
 }

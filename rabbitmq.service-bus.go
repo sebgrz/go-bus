@@ -1,7 +1,6 @@
 package gobus
 
 import (
-	"log"
 	"strings"
 
 	goeh "github.com/hetacode/go-eh"
@@ -10,6 +9,7 @@ import (
 
 // RabbitMQServiceBus implementation of service bus
 type RabbitMQServiceBus struct {
+	logger           ServiceBusLogger
 	channelConsumer  *amqp.Channel
 	channelPublisher *amqp.Channel
 	options          *RabbitMQServiceBusOptions
@@ -34,7 +34,7 @@ const (
 )
 
 // NewRabbitMQServiceBus new instance of queue
-func NewRabbitMQServiceBus(eventsMapper *goeh.EventsMapper, options *RabbitMQServiceBusOptions) ServiceBus {
+func NewRabbitMQServiceBus(eventsMapper *goeh.EventsMapper, logger ServiceBusLogger, options *RabbitMQServiceBusOptions) ServiceBus {
 	if options == nil {
 		panic("Options struct is not initialized")
 	}
@@ -78,6 +78,7 @@ func NewRabbitMQServiceBus(eventsMapper *goeh.EventsMapper, options *RabbitMQSer
 		channelPublisher: channelPublisher,
 		options:          options,
 		eventsMapper:     eventsMapper,
+		logger:           logger,
 	}
 
 	return bus
@@ -152,10 +153,10 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 
 		for msg := range msgs {
 			m := string(msg.Body)
-			log.Printf("Message: %s | %s", m, msg.Type)
+			b.logger.Infof("message: %s | %s", m, msg.Type)
 			e, err := b.eventsMapper.Resolve(m)
 			if err != nil {
-				log.Print("Cannot resolve event: ", msg.Type)
+				b.logger.Errorf("cannot resolve event %s | err: %v", msg.Type, err)
 				msg.Ack(true)
 				continue
 			}
@@ -170,7 +171,7 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 
 // Publish message
 func (b *RabbitMQServiceBus) Publish(event goeh.Event) error {
-	return publish(event, b.options.Retry, func(ev goeh.Event) error {
+	return publish(b.logger, event, b.options.Retry, func(ev goeh.Event) error {
 		err := b.channelPublisher.Publish(b.options.Exchanage, b.options.RoutingKey, false, false, amqp.Publishing{
 			ContentType: "application/json",
 			Body:        []byte(ev.GetPayload()),
