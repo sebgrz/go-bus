@@ -24,6 +24,7 @@ type KafkaServiceBus struct {
 type KafkaServiceBusOptions struct {
 	Servers string
 	Topic   string
+	Retry   *RetryOptions
 
 	// For consumer
 	GroupName               string
@@ -120,20 +121,14 @@ func (s *KafkaServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 // Publish event to kafka topic
 // Event ID should represent kafka message key - it means that can be same for multiple events which should were put on the same partition
 func (s *KafkaServiceBus) Publish(event goeh.Event) error {
-	if err := event.SavePayload(event); err != nil {
+	return publish(event, s.options.Retry, func(ev goeh.Event) error {
+		msg := kafka.Message{
+			Key:            []byte(ev.GetID()),
+			TopicPartition: kafka.TopicPartition{Topic: &s.topic, Partition: kafka.PartitionAny},
+			Value:          []byte(ev.GetPayload()),
+		}
+
+		err := s.producer.Produce(&msg, s.deliveryChan)
 		return err
-	}
-
-	msg := kafka.Message{
-		Key:            []byte(event.GetID()),
-		TopicPartition: kafka.TopicPartition{Topic: &s.topic, Partition: kafka.PartitionAny},
-		Value:          []byte(event.GetPayload()),
-	}
-
-	if err := s.producer.Produce(&msg, s.deliveryChan); err != nil {
-		return err
-	}
-
-	log.Printf("Event: %s has been sent", event.GetType())
-	return nil
+	})
 }

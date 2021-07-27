@@ -64,3 +64,14 @@ func main() {
 	log.Printf("the end")
 }
 ```
+
+## Retry option
+It's a retry mechanism that can be add to both kafka and rabbit implementation of service bus. When send event function return any error a library try send the event again after some delay.  
+```golang
+type RetryOptions struct {
+	Attempts int
+	Delay    time.Duration
+}
+```
+
+The RetryOption can be add to the both `RabbitMQServiceBusOptions` or `KafkaServiceBusOptions`

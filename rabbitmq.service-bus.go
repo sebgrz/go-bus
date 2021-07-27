@@ -23,6 +23,7 @@ type RabbitMQServiceBusOptions struct {
 	Exchanage  string
 	RoutingKey string
 	Kind       *string
+	Retry      *RetryOptions
 }
 
 const (
@@ -169,16 +170,11 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 
 // Publish message
 func (b *RabbitMQServiceBus) Publish(event goeh.Event) error {
-	if err := event.SavePayload(event); err != nil {
+	return publish(event, b.options.Retry, func(ev goeh.Event) error {
+		err := b.channelPublisher.Publish(b.options.Exchanage, b.options.RoutingKey, false, false, amqp.Publishing{
+			ContentType: "application/json",
+			Body:        []byte(ev.GetPayload()),
+		})
 		return err
-	}
-
-	if err := b.channelPublisher.Publish(b.options.Exchanage, b.options.RoutingKey, false, false, amqp.Publishing{
-		ContentType: "application/json",
-		Body:        []byte(event.GetPayload()),
-	}); err != nil {
-		return err
-	}
-	log.Printf("Event: %s has been sent", event.GetType())
-	return nil
+	})
 }
