@@ -1,6 +1,7 @@
 package gobus
 
 import (
+	"fmt"
 	"strings"
 
 	goeh "github.com/hetacode/go-eh"
@@ -9,11 +10,11 @@ import (
 
 // RabbitMQServiceBus implementation of service bus
 type RabbitMQServiceBus struct {
-	logger           ServiceBusLogger
-	channelConsumer  *amqp.Channel
-	channelPublisher *amqp.Channel
-	options          *RabbitMQServiceBusOptions
-	eventsMapper     *goeh.EventsMapper
+	mode         ServiceBusMode
+	logger       ServiceBusLogger
+	channel      *amqp.Channel
+	options      *RabbitMQServiceBusOptions
+	eventsMapper *goeh.EventsMapper
 }
 
 // RabbitMQServiceBusOptions struct with configuration for rabbitmq service bus
@@ -34,7 +35,7 @@ const (
 )
 
 // NewRabbitMQServiceBus new instance of queue
-func NewRabbitMQServiceBus(eventsMapper *goeh.EventsMapper, logger ServiceBusLogger, options *RabbitMQServiceBusOptions) ServiceBus {
+func NewRabbitMQServiceBus(mode ServiceBusMode, eventsMapper *goeh.EventsMapper, logger ServiceBusLogger, options *RabbitMQServiceBusOptions) ServiceBus {
 	if options == nil {
 		panic("Options struct is not initialized")
 	}
@@ -48,37 +49,36 @@ func NewRabbitMQServiceBus(eventsMapper *goeh.EventsMapper, logger ServiceBusLog
 		options.Kind = &t
 	}
 
-	consumerConn, err := amqp.Dial(options.Server)
-	publisherConn, err := amqp.Dial(options.Server)
-
-	if err != nil {
-		panic(err)
-	}
-	channelConsumer, err := consumerConn.Channel()
-	channelPublisher, err := publisherConn.Channel()
+	conn, err := amqp.Dial(options.Server)
 	if err != nil {
 		panic(err)
 	}
 
-	// decalare exchange for publisher
-	if err := channelPublisher.ExchangeDeclare(
-		options.Exchange,
-		*options.Kind,
-		true,
-		false,
-		false,
-		false,
-		nil,
-	); err != nil {
+	channel, err := conn.Channel()
+	if err != nil {
 		panic(err)
 	}
 
+	if mode == PublisherServiceBusMode {
+		// decalare exchange for publisher
+		if err := channel.ExchangeDeclare(
+			options.Exchange,
+			*options.Kind,
+			true,
+			false,
+			false,
+			false,
+			nil,
+		); err != nil {
+			panic(err)
+		}
+	}
 	bus := &RabbitMQServiceBus{
-		channelConsumer:  channelConsumer,
-		channelPublisher: channelPublisher,
-		options:          options,
-		eventsMapper:     eventsMapper,
-		logger:           logger,
+		channel:      channel,
+		options:      options,
+		eventsMapper: eventsMapper,
+		logger:       logger,
+		mode:         mode,
 	}
 
 	return bus
@@ -86,12 +86,16 @@ func NewRabbitMQServiceBus(eventsMapper *goeh.EventsMapper, logger ServiceBusLog
 
 // Consume events
 func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
+	if b.mode != ConsumerServiceBusMode {
+		panic(fmt.Sprintf("Consume failed - RabbitMQ client is created in '%s' mode", ServiceBusModeNameMapping[b.mode]))
+	}
+
 	evChan := make(chan goeh.Event)
 	errChan := make(chan error)
 
 	go func(b *RabbitMQServiceBus) {
 		exchanges := strings.Split(b.options.Exchange, "|")
-		ch := b.channelConsumer
+		ch := b.channel
 
 		for _, ex := range exchanges {
 			if err := ch.ExchangeDeclare(
@@ -171,8 +175,12 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 
 // Publish message
 func (b *RabbitMQServiceBus) Publish(event goeh.Event) error {
+	if b.mode != PublisherServiceBusMode {
+		panic(fmt.Sprintf("Publish failed - RabbitMQ client is created in '%s' mode", ServiceBusModeNameMapping[b.mode]))
+	}
+
 	return publish(b.logger, event, b.options.Retry, func(ev goeh.Event) error {
-		err := b.channelPublisher.Publish(b.options.Exchange, b.options.RoutingKey, false, false, amqp.Publishing{
+		err := b.channel.Publish(b.options.Exchange, b.options.RoutingKey, false, false, amqp.Publishing{
 			ContentType: "application/json",
 			Body:        []byte(ev.GetPayload()),
 		})
@@ -183,7 +191,7 @@ func (b *RabbitMQServiceBus) Publish(event goeh.Event) error {
 // PublishWithRouting - send message with specific routing key
 func (b *RabbitMQServiceBus) PublishWithRouting(key string, event goeh.Event) error {
 	return publish(b.logger, event, b.options.Retry, func(ev goeh.Event) error {
-		err := b.channelPublisher.Publish(b.options.Exchange, key, false, false, amqp.Publishing{
+		err := b.channel.Publish(b.options.Exchange, key, false, false, amqp.Publishing{
 			ContentType: "application/json",
 			Body:        []byte(ev.GetPayload()),
 		})

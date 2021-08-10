@@ -24,7 +24,7 @@ func main() {
 	done := make(<-chan os.Signal)
 
 	kind := gobus.RabbitMQServiceBusOptionsFanOutKind
-	bus := gobus.NewRabbitMQServiceBus(eventsMapper, new(fakeLogger), &gobus.RabbitMQServiceBusOptions{
+	bus := gobus.NewRabbitMQServiceBus(gobus.ConsumerServiceBusMode, eventsMapper, new(fakeLogger), &gobus.RabbitMQServiceBusOptions{
 		Kind:     &kind,
 		Exchange: "test-ex", // can be test-ex|test-ex2|... for multiple exchanges
 		Queue:    "test-queue",
