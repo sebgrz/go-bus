@@ -133,3 +133,8 @@ func (s *KafkaServiceBus) Publish(event goeh.Event) error {
 		return err
 	})
 }
+
+// PublishWithRouting - routing is only for RabbitMQ implementation so Kafka version should behave like Publish
+func (s *KafkaServiceBus) PublishWithRouting(key string, event goeh.Event) error {
+	return s.Publish(event)
+}

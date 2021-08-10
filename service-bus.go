@@ -11,6 +11,7 @@ import (
 type ServiceBus interface {
 	Consume() (<-chan goeh.Event, <-chan error)
 	Publish(message goeh.Event) error
+	PublishWithRouting(key string, message goeh.Event) error
 }
 
 type ServiceBusLogger interface {

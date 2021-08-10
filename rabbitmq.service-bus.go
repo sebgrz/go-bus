@@ -20,7 +20,7 @@ type RabbitMQServiceBus struct {
 type RabbitMQServiceBusOptions struct {
 	Server     string
 	Queue      string
-	Exchanage  string
+	Exchange   string
 	RoutingKey string
 	Kind       *string
 	Retry      *RetryOptions
@@ -62,7 +62,7 @@ func NewRabbitMQServiceBus(eventsMapper *goeh.EventsMapper, logger ServiceBusLog
 
 	// decalare exchange for publisher
 	if err := channelPublisher.ExchangeDeclare(
-		options.Exchanage,
+		options.Exchange,
 		*options.Kind,
 		true,
 		false,
@@ -90,7 +90,7 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 	errChan := make(chan error)
 
 	go func(b *RabbitMQServiceBus) {
-		exchanges := strings.Split(b.options.Exchanage, "|")
+		exchanges := strings.Split(b.options.Exchange, "|")
 		ch := b.channelConsumer
 
 		for _, ex := range exchanges {
@@ -172,7 +172,18 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 // Publish message
 func (b *RabbitMQServiceBus) Publish(event goeh.Event) error {
 	return publish(b.logger, event, b.options.Retry, func(ev goeh.Event) error {
-		err := b.channelPublisher.Publish(b.options.Exchanage, b.options.RoutingKey, false, false, amqp.Publishing{
+		err := b.channelPublisher.Publish(b.options.Exchange, b.options.RoutingKey, false, false, amqp.Publishing{
+			ContentType: "application/json",
+			Body:        []byte(ev.GetPayload()),
+		})
+		return err
+	})
+}
+
+// PublishWithRouting - send message with specific routing key
+func (b *RabbitMQServiceBus) PublishWithRouting(key string, event goeh.Event) error {
+	return publish(b.logger, event, b.options.Retry, func(ev goeh.Event) error {
+		err := b.channelPublisher.Publish(b.options.Exchange, key, false, false, amqp.Publishing{
 			ContentType: "application/json",
 			Body:        []byte(ev.GetPayload()),
 		})
