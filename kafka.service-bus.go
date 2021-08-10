@@ -11,6 +11,7 @@ import (
 
 // KafkaServiceBus implementation of service bus
 type KafkaServiceBus struct {
+	mode         ServiceBusMode
 	logger       ServiceBusLogger
 	eventsMapper *goeh.EventsMapper
 	producer     *kafka.Producer
@@ -33,7 +34,7 @@ type KafkaServiceBusOptions struct {
 
 // NewKafkaServiceBus instance
 // eventsMapper is using only in consumer mode
-func NewKafkaServiceBus(eventsMapper *goeh.EventsMapper, options *KafkaServiceBusOptions, logger ServiceBusLogger) ServiceBus {
+func NewKafkaServiceBus(mode ServiceBusMode, eventsMapper *goeh.EventsMapper, options *KafkaServiceBusOptions, logger ServiceBusLogger) ServiceBus {
 	if options == nil {
 		panic(fmt.Errorf("options parameter cannot be empty"))
 	}
@@ -42,33 +43,39 @@ func NewKafkaServiceBus(eventsMapper *goeh.EventsMapper, options *KafkaServiceBu
 		options:      options,
 		eventsMapper: eventsMapper,
 		logger:       logger,
+		mode:         mode,
 	}
 
-	pr, err := kafka.NewProducer(&kafka.ConfigMap{
-		"bootstrap.servers": options.Servers,
-	})
-	if err != nil {
-		panic(err)
-	}
-	bus.producer = pr
-	bus.topic = options.Topic
-
-	deliveryChan := make(chan kafka.Event)
-	bus.deliveryChan = deliveryChan
-
-	go func(b *KafkaServiceBus) {
-		defer close(deliveryChan)
-
-		for e := range deliveryChan {
-			logger.Infof("event %s has been delivered ", e.String())
+	if mode == PublisherServiceBusMode {
+		pr, err := kafka.NewProducer(&kafka.ConfigMap{
+			"bootstrap.servers": options.Servers,
+		})
+		if err != nil {
+			panic(err)
 		}
-	}(bus)
+		bus.producer = pr
+		bus.topic = options.Topic
+
+		deliveryChan := make(chan kafka.Event)
+		bus.deliveryChan = deliveryChan
+
+		go func(b *KafkaServiceBus) {
+			defer close(deliveryChan)
+
+			for e := range deliveryChan {
+				logger.Infof("event %s has been delivered ", e.String())
+			}
+		}(bus)
+	}
 
 	return bus
 }
 
 // Consume events from kafka partition
 func (s *KafkaServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
+	if s.mode != ConsumerServiceBusMode {
+		panic(fmt.Sprintf("Consume failed - Kafka client is created in '%s' mode", ServiceBusModeNameMapping[s.mode]))
+	}
 	rand.Seed(time.Now().UTC().UnixNano())
 	eCh := make(chan goeh.Event)
 	errCh := make(chan error)
@@ -85,12 +92,12 @@ func (s *KafkaServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 			"auto.offset.reset": "earliest",
 		})
 
-		defer consumer.Close()
-
 		if err != nil {
 			errCh <- err
 			return
 		}
+
+		defer consumer.Close()
 
 		err = consumer.SubscribeTopics([]string{s.topic}, nil)
 		if err != nil {
@@ -122,6 +129,9 @@ func (s *KafkaServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 // Publish event to kafka topic
 // Event ID should represent kafka message key - it means that can be same for multiple events which should were put on the same partition
 func (s *KafkaServiceBus) Publish(event goeh.Event) error {
+	if s.mode != PublisherServiceBusMode {
+		panic(fmt.Sprintf("Publish failed - Kafka client is created in '%s' mode", ServiceBusModeNameMapping[s.mode]))
+	}
 	return publish(s.logger, event, s.options.Retry, func(ev goeh.Event) error {
 		msg := kafka.Message{
 			Key:            []byte(ev.GetID()),
@@ -132,4 +142,9 @@ func (s *KafkaServiceBus) Publish(event goeh.Event) error {
 		err := s.producer.Produce(&msg, s.deliveryChan)
 		return err
 	})
+}
+
+// PublishWithRouting - routing is only for RabbitMQ implementation so Kafka version should behave like Publish
+func (s *KafkaServiceBus) PublishWithRouting(key string, event goeh.Event) error {
+	return s.Publish(event)
 }

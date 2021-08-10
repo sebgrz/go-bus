@@ -7,10 +7,23 @@ import (
 	goeh "github.com/hetacode/go-eh"
 )
 
+type ServiceBusMode int8
+
+const (
+	PublisherServiceBusMode ServiceBusMode = 1
+	ConsumerServiceBusMode  ServiceBusMode = 2
+)
+
+var ServiceBusModeNameMapping map[ServiceBusMode]string = map[ServiceBusMode]string{
+	PublisherServiceBusMode: "publisher",
+	ConsumerServiceBusMode:  "consumer",
+}
+
 // ServiceBus general abstraction for bus
 type ServiceBus interface {
 	Consume() (<-chan goeh.Event, <-chan error)
 	Publish(message goeh.Event) error
+	PublishWithRouting(key string, message goeh.Event) error
 }
 
 type ServiceBusLogger interface {
