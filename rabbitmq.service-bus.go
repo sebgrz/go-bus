@@ -19,9 +19,11 @@ type RabbitMQServiceBus struct {
 
 // RabbitMQServiceBusOptions struct with configuration for rabbitmq service bus
 type RabbitMQServiceBusOptions struct {
-	Server     string
-	Queue      string
-	Exchange   string
+	Server string
+	Queue  string
+	// Exchange - queue can be bind to multiple exchanges ex1|ex2...
+	Exchange string
+	// RoutingKey - queue can be bind to exchange with multiple routing keys rk1|rk2...
 	RoutingKey string
 	Kind       *string
 	Retry      *RetryOptions
@@ -57,6 +59,19 @@ func NewRabbitMQServiceBus(mode ServiceBusMode, eventsMapper *goeh.EventsMapper,
 	channel, err := conn.Channel()
 	if err != nil {
 		panic(err)
+	}
+
+	if mode == ConsumerServiceBusMode {
+		exLen := len(strings.Split(options.Exchange, "|"))
+		rkLen := len(strings.Split(options.RoutingKey, "|"))
+
+		if exLen == 0 && rkLen > 0 {
+			panic("no exchange to attach queue with routing key")
+		}
+
+		if exLen > 1 && rkLen > 1 {
+			panic(fmt.Sprintf("exchanges count: %d routing count: %d | to multiple exchanges can be attach at most one routing key OR multiple routing keys can be attach to only one exchange", exLen, rkLen))
+		}
 	}
 
 	if mode == PublisherServiceBusMode {
@@ -127,15 +142,19 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 		}
 
 		for _, ex := range exchanges {
-			if err := ch.QueueBind(
-				q.Name,
-				b.options.RoutingKey,
-				ex,
-				false,
-				nil,
-			); err != nil {
-				errChan <- err
-				return
+			keys := strings.Split(b.options.RoutingKey, "|")
+			for _, rk := range keys {
+				err := ch.QueueBind(
+					q.Name,
+					rk,
+					ex,
+					false,
+					nil,
+				)
+				if err != nil {
+					errChan <- err
+					return
+				}
 			}
 		}
 		msgs, err := ch.Consume(
