@@ -7,6 +7,8 @@ Universal pub-sub library for rabbitmq and kafka in Go
 
 ## Consumer implementation
 
+### General implementation
+
 ```golang
 
 // fakeLogger is only for tests - you should use own implementation with own logger
@@ -49,6 +51,34 @@ func main() {
 	<-done
 	log.Printf("the end")
 }
+```
+
+### Bind queue to multiple exchanges
+Consumer queue can be bind to multiple exchanges.
+> Important! In this case can be only zero or one routing key attach between **exchange** <-> **queue**
+
+```golang
+kind := gobus.RabbitMQServiceBusOptionsFanOutKind
+bus := gobus.NewRabbitMQServiceBus(eventsMapper,  new(fakeLogger), &gobus.RabbitMQServiceBusOptions{
+		Kind:      &kind,
+	Exchange: "test-ex1|test-ex2",
+	Queue:     "test-queue",
+	RoutingKey: "" // or "routing-key"
+	Server:    "amqp://rabbit:5672",
+})
+```
+### Bind queue to exchange with multiple routing keys
+Consumer queue can be bind to **only one** exchange with multiple routing keys.
+
+```golang
+kind := gobus.RabbitMQServiceBusOptionsFanOutKind
+bus := gobus.NewRabbitMQServiceBus(eventsMapper,  new(fakeLogger), &gobus.RabbitMQServiceBusOptions{
+		Kind:      &kind,
+	Exchange: "test-ex", // one exchange
+	Queue:     "test-queue",
+	RoutingKey: "routing-key1|routing-key2"
+	Server:    "amqp://rabbit:5672",
+})
 ```
 
 ## Producer implementation
