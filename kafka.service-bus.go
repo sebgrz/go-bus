@@ -45,7 +45,8 @@ func NewKafkaServiceBus(mode ServiceBusMode, eventsMapper *goeh.EventsMapper, op
 		logger:       logger,
 		mode:         mode,
 	}
-
+	
+	bus.topic = options.Topic
 	if mode == PublisherServiceBusMode {
 		pr, err := kafka.NewProducer(&kafka.ConfigMap{
 			"bootstrap.servers": options.Servers,
@@ -54,7 +55,6 @@ func NewKafkaServiceBus(mode ServiceBusMode, eventsMapper *goeh.EventsMapper, op
 			panic(err)
 		}
 		bus.producer = pr
-		bus.topic = options.Topic
 
 		deliveryChan := make(chan kafka.Event)
 		bus.deliveryChan = deliveryChan
