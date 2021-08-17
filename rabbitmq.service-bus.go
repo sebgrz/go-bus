@@ -24,9 +24,10 @@ type RabbitMQServiceBusOptions struct {
 	// Exchange - queue can be bind to multiple exchanges ex1|ex2...
 	Exchange string
 	// RoutingKey - queue can be bind to exchange with multiple routing keys rk1|rk2...
-	RoutingKey string
-	Kind       *string
-	Retry      *RetryOptions
+	RoutingKey        string
+	Kind              *string
+	Retry             *RetryOptions
+	MiddlewareOptions MiddlewareOptions
 }
 
 const (
@@ -178,13 +179,26 @@ func (b *RabbitMQServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 			m := string(msg.Body)
 			b.logger.Infof("message: %s | %s", m, msg.Type)
 			e, err := b.eventsMapper.Resolve(m)
+
+			for _, mo := range b.options.MiddlewareOptions.ConsumerMiddlewares {
+				mo.Before(e, err)
+			}
+
 			if err != nil {
 				b.logger.Errorf("cannot resolve event %s | err: %v", msg.Type, err)
 				msg.Ack(true)
+
+				for _, mo := range b.options.MiddlewareOptions.ConsumerMiddlewares {
+					mo.After(e, err)
+				}
 				continue
 			}
 			evChan <- e
 			msg.Ack(true)
+
+			for _, mo := range b.options.MiddlewareOptions.ConsumerMiddlewares {
+				mo.After(e, nil)
+			}
 		}
 		<-forever
 	}(b)
@@ -198,22 +212,27 @@ func (b *RabbitMQServiceBus) Publish(event goeh.Event) error {
 		panic(fmt.Sprintf("Publish failed - RabbitMQ client is created in '%s' mode", ServiceBusModeNameMapping[b.mode]))
 	}
 
-	return publish(b.logger, event, b.options.Retry, func(ev goeh.Event) error {
-		err := b.channel.Publish(b.options.Exchange, b.options.RoutingKey, false, false, amqp.Publishing{
-			ContentType: "application/json",
-			Body:        []byte(ev.GetPayload()),
-		})
-		return err
-	})
+	return b.PublishWithRouting(b.options.RoutingKey, event)
 }
 
 // PublishWithRouting - send message with specific routing key
 func (b *RabbitMQServiceBus) PublishWithRouting(key string, event goeh.Event) error {
 	return publish(b.logger, event, b.options.Retry, func(ev goeh.Event) error {
+
+		for _, mo := range b.options.MiddlewareOptions.PublisherMiddlewares {
+			mo.Before(ev, nil)
+		}
+
+		// Produce
 		err := b.channel.Publish(b.options.Exchange, key, false, false, amqp.Publishing{
 			ContentType: "application/json",
 			Body:        []byte(ev.GetPayload()),
 		})
+
+		for _, mo := range b.options.MiddlewareOptions.PublisherMiddlewares {
+			mo.After(ev, err)
+		}
+
 		return err
 	})
 }

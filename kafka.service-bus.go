@@ -23,9 +23,10 @@ type KafkaServiceBus struct {
 
 // KafkaServiceBusOptions configuration struct for kafka service bus
 type KafkaServiceBusOptions struct {
-	Servers string
-	Topic   string
-	Retry   *RetryOptions
+	Servers           string
+	Topic             string
+	Retry             *RetryOptions
+	MiddlewareOptions MiddlewareOptions
 
 	// For consumer
 	GroupName               string
@@ -45,7 +46,7 @@ func NewKafkaServiceBus(mode ServiceBusMode, eventsMapper *goeh.EventsMapper, op
 		logger:       logger,
 		mode:         mode,
 	}
-	
+
 	bus.topic = options.Topic
 	if mode == PublisherServiceBusMode {
 		pr, err := kafka.NewProducer(&kafka.ConfigMap{
@@ -111,11 +112,18 @@ func (s *KafkaServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 			case *kafka.Message:
 				rawValue := string(e.Value)
 				event, err := s.eventsMapper.Resolve(rawValue)
+
+				for _, mo := range s.options.MiddlewareOptions.ConsumerMiddlewares {
+					mo.Before(event, err)
+				}
 				if err != nil {
 					s.logger.Errorf("cannot resolve event: ", rawValue)
 					continue
 				}
 				eventCh <- event
+				for _, mo := range s.options.MiddlewareOptions.ConsumerMiddlewares {
+					mo.After(event, nil)
+				}
 			case kafka.Error:
 				s.logger.Errorf("kafka error: %v", e)
 				errCh <- e
@@ -139,7 +147,16 @@ func (s *KafkaServiceBus) Publish(event goeh.Event) error {
 			Value:          []byte(ev.GetPayload()),
 		}
 
+		for _, mo := range s.options.MiddlewareOptions.PublisherMiddlewares {
+			mo.Before(ev, nil)
+		}
+
+		// Produce
 		err := s.producer.Produce(&msg, s.deliveryChan)
+
+		for _, mo := range s.options.MiddlewareOptions.PublisherMiddlewares {
+			mo.After(ev, err)
+		}
 		return err
 	})
 }
