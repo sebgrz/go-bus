@@ -107,7 +107,7 @@ func (s *KafkaServiceBus) Consume() (<-chan goeh.Event, <-chan error) {
 		}
 
 		for {
-			ev := consumer.Poll(0)
+			ev := consumer.Poll(100)
 			switch e := ev.(type) {
 			case *kafka.Message:
 				rawValue := string(e.Value)
