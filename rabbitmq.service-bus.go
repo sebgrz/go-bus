@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	goeh "github.com/hetacode/go-eh"
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // RabbitMQServiceBus implementation of service bus
